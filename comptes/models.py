@@ -94,7 +94,7 @@ class Utilisateur(AbstractBaseUser, PermissionsMixin):
     cree_le = models.DateTimeField(default=timezone.now)
     
     # Champs Django requis
-    is_active = models.BooleanField(default=True)
+    is_active = models.BooleanField(default=False)
     is_staff = models.BooleanField(default=False)
     is_superuser = models.BooleanField(default=False)
     derniere_connexion = models.DateTimeField(null=True, blank=True)
