@@ -1,0 +1,15 @@
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
+from .views import (
+    RendezVousTypeViewSet, RendezVousStatutViewSet,
+    RendezVousViewSet
+)
+
+router = DefaultRouter()
+router.register(r'types', RendezVousTypeViewSet, basename='type')
+router.register(r'statuts', RendezVousStatutViewSet, basename='statut')
+router.register(r'rendez-vous', RendezVousViewSet, basename='rendezvous')
+
+urlpatterns = [
+    path('', include(router.urls)),
+]

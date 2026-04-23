@@ -1,0 +1,18 @@
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
+from .views import (
+    PlanViewSet, AbonnementViewSet, PaiementViewSet,
+    InvoiceViewSet, CouponViewSet, TarifConsultationViewSet
+)
+
+router = DefaultRouter()
+router.register(r'plans', PlanViewSet, basename='plan')
+router.register(r'abonnements', AbonnementViewSet, basename='abonnement')
+router.register(r'paiements', PaiementViewSet, basename='paiement')
+router.register(r'invoices', InvoiceViewSet, basename='invoice')
+router.register(r'coupons', CouponViewSet, basename='coupon')
+router.register(r'tarifs-consultation', TarifConsultationViewSet, basename='tarif')
+
+urlpatterns = [
+    path('', include(router.urls)),
+]

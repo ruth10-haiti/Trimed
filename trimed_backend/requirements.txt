@@ -1,0 +1,24 @@
+Django==4.2.13
+djangorestframework==3.14.0
+djangorestframework-simplejwt==5.3.0
+psycopg[binary]>=3.3.2  # Changement majeur ici
+django-cors-headers==4.3.1
+drf-yasg==1.21.7
+django-filter==23.5
+Pillow==10.4.0
+python-decouple==3.8
+celery==5.3.4
+redis==5.0.1
+django-redis==5.4.0
+channels==4.1.0
+daphne==4.1.0
+pyotp==2.9.0
+reportlab==4.1.0
+django-sendgrid-v5==0.8.1
+phonenumbers==8.13.22
+pytest==7.4.4
+pytest-django==4.8.0
+django-extensions==4.1.0
+setuptools==70.0.0
+sqlparse==0.5.3
+wheel==0.43.0
