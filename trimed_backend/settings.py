@@ -59,6 +59,8 @@ INSTALLED_APPS = [
     'rendez_vous',
     'facturation',
     'notifications',
+    'hospitalisation',
+    'salles_medicales',
 
 ]
 
@@ -159,7 +161,6 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
 
@@ -196,3 +197,7 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+# Brevo (Sendinblue) email configuration
+BREVO_API_KEY = config('BREVO_API_KEY', default='')
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@votre-domaine.com')
+FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:3000')

@@ -7,7 +7,11 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenRefreshView
 from django_filters.rest_framework import DjangoFilterBackend
 from django.contrib.auth import authenticate
-from .models import Utilisateur
+from .models import Utilisateur, EmailVerificationToken
+from django.shortcuts import get_object_or_404, redirect
+from django.contrib import messages
+from django.utils import timezone
+from rest_framework.decorators import api_view, permission_classes
 from .serializers import (
     UtilisateurSerializer, InscriptionSerializer,
     LoginSerializer, ChangePasswordSerializer, UpdateProfileSerializer
@@ -216,3 +220,16 @@ class InscriptionView(APIView):
             }, status=status.HTTP_201_CREATED)
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def verify_email(request, token):
+    token_obj = get_object_or_404(EmailVerificationToken, token=token)
+    if token_obj.is_valid():
+        token_obj.verified_at = timezone.now()
+        token_obj.utilisateur.is_active = True
+        token_obj.utilisateur.save()
+        token_obj.save()
+        return Response({'message': 'Email vérifié avec succès.Vous pouvez vous connecter.'}, status=status.HTTP_200_OK)
+    else:
+        return Response({'error': 'Lien invalide ou expiré'}, status=status.HTTP_400_BAD_REQUEST)

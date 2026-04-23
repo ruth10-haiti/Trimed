@@ -29,7 +29,7 @@ schema_view = get_schema_view(
         title="Trimed Backend API",
         default_version='v1',
         description="API pour l'application de gestion hospitalière Trimed",
-        contact=openapi.Contact(email="ruthdieuveuille09@gmail.com"),
+        contact=openapi.Contact(email="trimedhaiti@gmail.com"),
     ),
     public=True,
     permission_classes=[permissions.AllowAny],
@@ -52,6 +52,8 @@ urlpatterns = [
     path('api/rendez-vous/', include('rendez_vous.urls')),
     path('api/facturation/', include('facturation.urls')),
     path('api/notifications/', include('notifications.urls')),
+    path('api/hospitalisation/', include('hospitalisation.urls')),
+path('api/salles-medicales/', include('salles_medicales.urls')),
 ]
 
 if settings.DEBUG:
