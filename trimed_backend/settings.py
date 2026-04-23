@@ -135,7 +135,7 @@ SIMPLE_JWT = {
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
     
-    'USER_ID_FIELD': 'utilisateur_id',  # ← Changer de 'id' à 'utilisateur_id'
+    'USER_ID_FIELD': 'utilisateur_id',  
     'USER_ID_CLAIM': 'user_id',
     
     'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
