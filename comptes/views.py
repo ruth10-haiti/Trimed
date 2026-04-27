@@ -7,6 +7,8 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenRefreshView
 from django_filters.rest_framework import DjangoFilterBackend
 from django.contrib.auth import authenticate
+from .utils import send_verification_email
+from datetime import timedelta
 from .models import Utilisateur, EmailVerificationToken
 from django.shortcuts import get_object_or_404, redirect
 from django.contrib import messages
@@ -194,42 +196,69 @@ class LogoutView(APIView):
             )
 
 
-class InscriptionView(APIView):
-    """Vue pour l'inscription des hôpitaux"""
+# class InscriptionView(APIView):
+#     """Vue pour l'inscription des hôpitaux"""
 
+#     permission_classes = [AllowAny]
+
+#     def post(self, request):
+#         serializer = InscriptionSerializer(data=request.data)
+
+#         if serializer.is_valid():
+#             utilisateur = serializer.save()
+
+#             # Générer les tokens JWT
+#             refresh = RefreshToken.for_user(utilisateur)
+#             user_serializer = UtilisateurSerializer(utilisateur)
+#             user_data = user_serializer.data
+
+#             return Response({
+#                 'refresh': str(refresh),
+#                 'access': str(refresh.access_token),
+#                 # ✅ 'user' pou match ak React
+#                 'user': user_data,
+#                 'tenant': user_data.get('hopital_detail'),
+#                 'message': 'Inscription réussie'
+#             }, status=status.HTTP_201_CREATED)
+
+#         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+# @api_view(['GET'])
+# @permission_classes([AllowAny])
+# def verify_email(request, token):
+#     token_obj = get_object_or_404(EmailVerificationToken, token=token)
+#     if token_obj.is_valid():
+#         token_obj.verified_at = timezone.now()
+#         token_obj.utilisateur.is_active = True
+#         token_obj.utilisateur.save()
+#         token_obj.save()
+#         return Response({'message': 'Email vérifié avec succès.Vous pouvez vous connecter.'}, status=status.HTTP_200_OK)
+#     else:
+#         return Response({'error': 'Lien invalide ou expiré'}, status=status.HTTP_400_BAD_REQUEST)
+    
+   
+class InscriptionView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
         serializer = InscriptionSerializer(data=request.data)
-
         if serializer.is_valid():
-            utilisateur = serializer.save()
+            utilisateur = serializer.save()  # is_active=False par défaut
 
-            # Générer les tokens JWT
-            refresh = RefreshToken.for_user(utilisateur)
-            user_serializer = UtilisateurSerializer(utilisateur)
-            user_data = user_serializer.data
+            # Créer un token de vérification valable 24h
+            token_obj = EmailVerificationToken.objects.create(
+                utilisateur=utilisateur,
+                expire_le=timezone.now() + timedelta(hours=24)
+            )
+            
+            # Envoyer l'email
+            email_sent = send_verification_email(utilisateur, token_obj.token)
+            if not email_sent:
+                # Log l'erreur mais on continue (l'utilisateur pourra demander un nouveau lien)
+                pass
 
             return Response({
-                'refresh': str(refresh),
-                'access': str(refresh.access_token),
-                # ✅ 'user' pou match ak React
-                'user': user_data,
-                'tenant': user_data.get('hopital_detail'),
-                'message': 'Inscription réussie'
+                'success': True,
+                'message': 'Inscription réussie. Un email de vérification vous a été envoyé.'
             }, status=status.HTTP_201_CREATED)
-
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-@api_view(['GET'])
-@permission_classes([AllowAny])
-def verify_email(request, token):
-    token_obj = get_object_or_404(EmailVerificationToken, token=token)
-    if token_obj.is_valid():
-        token_obj.verified_at = timezone.now()
-        token_obj.utilisateur.is_active = True
-        token_obj.utilisateur.save()
-        token_obj.save()
-        return Response({'message': 'Email vérifié avec succès.Vous pouvez vous connecter.'}, status=status.HTTP_200_OK)
-    else:
-        return Response({'error': 'Lien invalide ou expiré'}, status=status.HTTP_400_BAD_REQUEST)

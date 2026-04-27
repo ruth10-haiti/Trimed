@@ -149,20 +149,31 @@ class Utilisateur(AbstractBaseUser, PermissionsMixin):
             models.Index(fields=['hopital']),
         ]
 
+# class EmailVerificationToken(models.Model):
+#     utilisateur = models.ForeignKey(Utilisateur, on_delete=models.CASCADE)
+#     token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+#     created_at = models.DateTimeField(auto_now_add=True)
+#     expires_at = models.DateTimeField()
+#     verified_at = models.DateTimeField(null=True, blank=True)
+
+#     def is_valid(self):
+#         return not self.verified_at and self.expires_at > timezone.now()
+
+#     def save(self, *args, **kwargs):
+#         if not self.expires_at:
+#             self.expires_at = timezone.now() + timezone.timedelta(days=1)
+#         super().save(*args, **kwargs)
+
+#     def __str__(self):
+#         return f"Token pour {self.utilisateur.email}"
+ 
+
 class EmailVerificationToken(models.Model):
     utilisateur = models.ForeignKey(Utilisateur, on_delete=models.CASCADE)
-    token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
-    created_at = models.DateTimeField(auto_now_add=True)
-    expires_at = models.DateTimeField()
+    token = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    cree_le = models.DateTimeField(auto_now_add=True)
+    expire_le = models.DateTimeField()
     verified_at = models.DateTimeField(null=True, blank=True)
 
     def is_valid(self):
-        return not self.verified_at and self.expires_at > timezone.now()
-
-    def save(self, *args, **kwargs):
-        if not self.expires_at:
-            self.expires_at = timezone.now() + timezone.timedelta(days=1)
-        super().save(*args, **kwargs)
-
-    def __str__(self):
-        return f"Token pour {self.utilisateur.email}"
+        return not self.verified_at and self.expire_le > timezone.now()
