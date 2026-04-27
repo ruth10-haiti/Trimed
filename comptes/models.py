@@ -167,13 +167,12 @@ class Utilisateur(AbstractBaseUser, PermissionsMixin):
 #     def __str__(self):
 #         return f"Token pour {self.utilisateur.email}"
  
-
 class EmailVerificationToken(models.Model):
-    utilisateur = models.ForeignKey(Utilisateur, on_delete=models.CASCADE)
+    utilisateur = models.ForeignKey('Utilisateur', on_delete=models.CASCADE, related_name='verification_tokens')
     token = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
-    cree_le = models.DateTimeField(auto_now_add=True)
-    expire_le = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
     verified_at = models.DateTimeField(null=True, blank=True)
 
     def is_valid(self):
-        return not self.verified_at and self.expire_le > timezone.now()
+        return not self.verified_at and self.expires_at > timezone.now()
