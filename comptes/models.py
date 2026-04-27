@@ -2,6 +2,7 @@ from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, Permis
 from django.db import models
 import uuid
 from django.utils import timezone
+from datetime import timedelta
 from django.core.validators import EmailValidator
 from django.contrib.auth.hashers import make_password, check_password
 
@@ -171,8 +172,11 @@ class EmailVerificationToken(models.Model):
     utilisateur = models.ForeignKey('Utilisateur', on_delete=models.CASCADE, related_name='verification_tokens')
     token = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     created_at = models.DateTimeField(auto_now_add=True)
-    expires_at = models.DateTimeField()
+    # expires_at = models.DateTimeField()
+    expires_at = models.DateTimeField(default=timezone.now() + timedelta(hours=24))
     verified_at = models.DateTimeField(null=True, blank=True)
 
     def is_valid(self):
         return not self.verified_at and self.expires_at > timezone.now()
+    
+    
