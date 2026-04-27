@@ -108,6 +108,10 @@ class Utilisateur(AbstractBaseUser, PermissionsMixin):
         blank=True,
         related_name='utilisateurs_modifies'
     )
+
+    @property
+    def id(self):
+        return self.utilisateur_id
     
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['nom_complet']
