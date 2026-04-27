@@ -8,6 +8,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from django_filters.rest_framework import DjangoFilterBackend
 from django.contrib.auth import authenticate
 from .utils import send_verification_email
+import threading
 from datetime import timedelta
 from .models import Utilisateur, EmailVerificationToken
 from django.shortcuts import get_object_or_404, redirect
@@ -236,29 +237,56 @@ class LogoutView(APIView):
 #     else:
 #         return Response({'error': 'Lien invalide ou expiré'}, status=status.HTTP_400_BAD_REQUEST)
     
-   
+   #le meilleur 
+# class InscriptionView(APIView):
+#     permission_classes = [AllowAny]
+
+#     def post(self, request):
+#         serializer = InscriptionSerializer(data=request.data)
+#         if serializer.is_valid():
+#             utilisateur = serializer.save()  # is_active=False par défaut
+
+#             # Créer un token de vérification valable 24h
+#             token_obj = EmailVerificationToken.objects.create(
+#                 utilisateur=utilisateur,
+#                 expire_le=timezone.now() + timedelta(hours=24)
+#             )
+            
+#             # Envoyer l'email
+#             email_sent = send_verification_email(utilisateur, token_obj.token)
+#             if not email_sent:
+#                 # Log l'erreur mais on continue (l'utilisateur pourra demander un nouveau lien)
+#                 pass
+
+#             return Response({
+#                 'success': True,
+#                 'message': 'Inscription réussie. Un email de vérification vous a été envoyé.'
+#             }, status=status.HTTP_201_CREATED)
+#         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 class InscriptionView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
         serializer = InscriptionSerializer(data=request.data)
         if serializer.is_valid():
-            utilisateur = serializer.save()  # is_active=False par défaut
+            utilisateur = serializer.save()  # is_active=False
 
-            # Créer un token de vérification valable 24h
+            # Créer token de vérification
             token_obj = EmailVerificationToken.objects.create(
                 utilisateur=utilisateur,
                 expire_le=timezone.now() + timedelta(hours=24)
             )
-            
-            # Envoyer l'email
-            email_sent = send_verification_email(utilisateur, token_obj.token)
-            if not email_sent:
-                # Log l'erreur mais on continue (l'utilisateur pourra demander un nouveau lien)
-                pass
+
+            # Envoi asynchrone (ne bloque pas le worker)
+            threading.Thread(
+                target=send_verification_email,
+                args=(utilisateur, str(token_obj.token)),
+                daemon=True
+            ).start()
 
             return Response({
                 'success': True,
-                'message': 'Inscription réussie. Un email de vérification vous a été envoyé.'
+                'message': 'Inscription réussie. Vérifiez vos emails.'
             }, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
