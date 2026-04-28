@@ -275,7 +275,7 @@ class InscriptionView(APIView):
             # Créer token de vérification
             token_obj = EmailVerificationToken.objects.create(
                 utilisateur=utilisateur,
-                expire_le=timezone.now() + timedelta(hours=24)
+                expires_at=timezone.now() + timedelta(hours=24)
             )
 
             # Envoi asynchrone (ne bloque pas le worker)
