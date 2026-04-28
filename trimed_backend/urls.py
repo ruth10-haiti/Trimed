@@ -53,7 +53,7 @@ urlpatterns = [
     path('api/facturation/', include('facturation.urls')),
     path('api/notifications/', include('notifications.urls')),
     path('api/hospitalisation/', include('hospitalisation.urls')),
-path('api/salles-medicales/', include('salles_medicales.urls')),
+    path('api/salles-medicales/', include('salles_medicales.urls')),
 ]
 
 if settings.DEBUG:

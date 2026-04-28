@@ -9,7 +9,7 @@ def health_check(request):
     """Endpoint de vérification de santé de l'API"""
     return Response({
         'status': 'OK',
-        'message': 'Trimed Backend API is running',
+        'message': 'Backend trimedhaiti',
         'timestamp': timezone.now(),
         'version': '1.0.0'
     })
@@ -17,9 +17,9 @@ def health_check(request):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def api_info(request):
-    """Informations sur l'API"""
+    """Informations sur l'API de Trimed"""
     return Response({
-        'name': 'Trimed Backend API',
+        'name': ' API de Trimed',
         'version': '1.0.0',
         'description': 'API pour la gestion hospitalière',
         'endpoints': {
@@ -31,6 +31,9 @@ def api_info(request):
             'facturation': '/api/facturation/',
             'notifications': '/api/notifications/',
             'tenants': '/api/tenants/',
+            'hospitalisation' : 'api/hospitalisation/',
+            'salles-medicales':'api/salles-medicales/', 
+ 
         },
         'documentation': {
             'swagger': '/swagger/',
