@@ -178,5 +178,7 @@ class EmailVerificationToken(models.Model):
 
     def is_valid(self):
         return not self.verified_at and self.expires_at > timezone.now()
+
+
     
     
