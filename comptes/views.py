@@ -9,6 +9,12 @@ from django_filters.rest_framework import DjangoFilterBackend
 from django.contrib.auth import authenticate
 from .utils import send_verification_email
 import threading
+import json
+from django.db import transaction
+from django.shortcuts import get_object_or_404
+from .serializers import InscriptionSerializer   
+from .models import Utilisateur, EmailVerificationToken
+from .utils import send_verification_email  
 from datetime import timedelta
 from .models import Utilisateur, EmailVerificationToken
 from django.shortcuts import get_object_or_404, redirect
@@ -264,32 +270,142 @@ class LogoutView(APIView):
 #             }, status=status.HTTP_201_CREATED)
 #         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+# class InscriptionView(APIView):
+#     permission_classes = [AllowAny]
+
+#     def post(self, request):
+#         serializer = InscriptionSerializer(data=request.data)
+#         if serializer.is_valid():
+#             utilisateur = serializer.save()  # is_active=False
+
+#             # Créer token de vérification
+#             token_obj = EmailVerificationToken.objects.create(
+#                 utilisateur=utilisateur,
+#                 expires_at=timezone.now() + timedelta(hours=24)
+#             )
+
+#             # Envoi asynchrone (ne bloque pas le worker)
+#             threading.Thread(
+#                 target=send_verification_email,
+#                 args=(utilisateur, str(token_obj.token)),
+#                 daemon=True
+#             ).start()
+
+#             return Response({
+#                 'success': True,
+#                 'message': 'Inscription réussie. Vérifiez vos emails.'
+#             }, status=status.HTTP_201_CREATED)
+#         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+# @api_view(['GET'])
+# @permission_classes([AllowAny])
+# def verify_email(request, token):
+#     token_obj = get_object_or_404(EmailVerificationToken, token=token)
+#     if token_obj.is_valid():
+#         token_obj.verified_at = timezone.now()
+#         token_obj.utilisateur.is_active = True
+#         token_obj.utilisateur.save()
+#         token_obj.save()
+#         return Response({
+#             'message': 'Email vérifié avec succès. Vous pouvez maintenant vous connecter.'
+#         }, status=status.HTTP_200_OK)
+#     else:
+#         return Response({
+#             'error': 'Lien d\'activation invalide ou expiré.'
+#         }, status=status.HTTP_400_BAD_REQUEST)
+      # à créer (envoi asynchrone)
+
+
 class InscriptionView(APIView):
     permission_classes = [AllowAny]
 
+    @transaction.atomic
     def post(self, request):
+        # 1. Validation des données utilisateur
         serializer = InscriptionSerializer(data=request.data)
-        if serializer.is_valid():
-            utilisateur = serializer.save()  # is_active=False
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-            # Créer token de vérification
-            token_obj = EmailVerificationToken.objects.create(
-                utilisateur=utilisateur,
-                expires_at=timezone.now() + timedelta(hours=24)
+        # 2. Création de l'utilisateur (is_active=False par défaut)
+        utilisateur = serializer.save()
+
+        # 3. Forcer le rôle (par exemple propriétaire d'hôpital) et désactiver le compte
+        utilisateur.role = 'proprietaire-hopital'
+        utilisateur.is_active = False
+        utilisateur.save(update_fields=['role', 'is_active'])
+
+        # 4. Récupération des données de l'hôpital (tenant) – optionnel
+        hopital_data_raw = request.data.get('hopital_data')
+        hopital_data = None
+        if hopital_data_raw:
+            if isinstance(hopital_data_raw, str):
+                try:
+                    hopital_data = json.loads(hopital_data_raw)
+                except json.JSONDecodeError:
+                    hopital_data = None
+            elif isinstance(hopital_data_raw, dict):
+                hopital_data = hopital_data_raw
+
+        tenant = None
+        if hopital_data:
+            from gestion_tenants.models import Tenant   # adapte l'import selon ton projet
+            nombre_lits = int(hopital_data.get('nombre_de_lits', 1))
+            if nombre_lits < 1:
+                nombre_lits = 1
+
+            tenant = Tenant.objects.create(
+                nom=hopital_data.get('nom', ''),
+                adresse=hopital_data.get('adresse', ''),
+                telephone=hopital_data.get('telephone', ''),
+                email_professionnel=hopital_data.get('email_professionnel', ''),
+                directeur=hopital_data.get('directeur', ''),
+                nombre_de_lits=nombre_lits,
+                numero_enregistrement=hopital_data.get('numero_enregistrement', ''),
+                statut='inactif',
+                type_abonnement=hopital_data.get('type_abonnement', 'basic'),
+                statut_verification_document='en_attente',
+                nom_schema_base_de_donnees=hopital_data.get('nom_schema_base_de_donnees', ''),
+                proprietaire_utilisateur=utilisateur,
+                cree_par_utilisateur=utilisateur,
             )
+            # Associer le tenant à l'utilisateur
+            utilisateur.hopital = tenant
+            utilisateur.save(update_fields=['hopital'])
 
-            # Envoi asynchrone (ne bloque pas le worker)
-            threading.Thread(
-                target=send_verification_email,
-                args=(utilisateur, str(token_obj.token)),
-                daemon=True
-            ).start()
+        # 5. Créer un token de vérification email (expiration 24h)
+        token_obj = EmailVerificationToken.objects.create(
+            utilisateur=utilisateur,
+            expires_at=timezone.now() + timedelta(hours=24)   # champ 'expires_at'
+        )
 
-            return Response({
-                'success': True,
-                'message': 'Inscription réussie. Vérifiez vos emails.'
-            }, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        # 6. Envoi de l'email en arrière‑plan (ne bloque pas la réponse)
+        threading.Thread(
+            target=send_verification_email,
+            args=(utilisateur, str(token_obj.token)),
+            daemon=True
+        ).start()
+
+        # 7. Réponse finale (pas de token JWT car compte inactif)
+        return Response({
+            'success': True,
+            'message': 'Inscription réussie. Vérifiez votre email pour activer votre compte.',
+            'user': {
+                'id': utilisateur.pk,
+                'email': utilisateur.email,
+                'nom_complet': utilisateur.nom_complet,
+                'role': utilisateur.role,
+                'is_active': utilisateur.is_active,
+                'hopital_id': tenant.pk if tenant else None,
+                'hopital_nom': tenant.nom if tenant else None,
+            },
+            'tenant': {
+                'id': tenant.pk,
+                'nom': tenant.nom,
+                'statut': tenant.statut,
+            } if tenant else None
+        }, status=status.HTTP_201_CREATED)
+
+
+# Vue de vérification d'email (reste identique)
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def verify_email(request, token):
