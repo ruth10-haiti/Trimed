@@ -201,3 +201,5 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 BREVO_API_KEY = config('BREVO_API_KEY', default='')
 DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@votre-domaine.com')
 FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:3000')
+# EMAIL_BACKEND= anymail.backends.brevo.EmailBackend
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
