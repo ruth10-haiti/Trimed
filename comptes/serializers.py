@@ -39,7 +39,6 @@ class UtilisateurSerializer(serializers.ModelSerializer):
         }
 
     def validate_email(self, value):
-        """Validation email — ignore si se menm itilizate a (update)"""
         instance = getattr(self, 'instance', None)
         if instance and instance.email == value:
             return value
@@ -55,10 +54,7 @@ class UtilisateurSerializer(serializers.ModelSerializer):
         return value
 
     def create(self, validated_data):
-        """CREATE — hash mdp kòrèkteman via creer_utilisateur()"""
         password = validated_data.pop('password', None)
-
-        # Champs ki pa fè pati sinatire creer_utilisateur
         extra_fields = {
             k: v for k, v in validated_data.items()
             if k not in ['email', 'nom_complet', 'role', 'hopital']

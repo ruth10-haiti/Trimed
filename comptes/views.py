@@ -171,9 +171,7 @@ class LoginView(APIView):
             return Response({
                 'refresh': str(refresh),
                 'access': str(refresh.access_token),
-                # ✅ 'user' (pa 'utilisateur') — pou match ak React djangoAuthApi.ts
                 'user': user_data,
-                # ✅ tenant separe — pou mapUserResponse() jwenn li fasil
                 'tenant': user_data.get('hopital_detail')
             })
 
@@ -405,20 +403,37 @@ class InscriptionView(APIView):
         }, status=status.HTTP_201_CREATED)
 
 
-# Vue de vérification d'email (reste identique)
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def verify_email(request, token):
-    token_obj = get_object_or_404(EmailVerificationToken, token=token)
-    if token_obj.is_valid():
-        token_obj.verified_at = timezone.now()
-        token_obj.utilisateur.is_active = True
-        token_obj.utilisateur.save()
-        token_obj.save()
+    print(f"🔍 Vérification email avec token: {token}")
+    
+    try:
+        token_obj = EmailVerificationToken.objects.get(token=token)
+        print(f" Token trouvé pour: {token_obj.utilisateur.email}")
+        
+        if token_obj.is_valid():
+            print("Token valide, activation du compte...")
+            token_obj.verified_at = timezone.now()
+            token_obj.utilisateur.is_active = True
+            token_obj.utilisateur.save()
+            token_obj.save()
+            
+            # Rediriger vers le frontend avec succès
+            return Response({
+                'success': True,
+                'message': 'Email vérifié avec succès. Vous pouvez maintenant vous connecter.'
+            }, status=status.HTTP_200_OK)
+        else:
+            print(" Token expiré ou déjà utilisé")
+            return Response({
+                'success': False,
+                'error': 'Lien d\'activation invalide ou expiré.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+    except EmailVerificationToken.DoesNotExist:
+        print(" Token non trouvé")
         return Response({
-            'message': 'Email vérifié avec succès. Vous pouvez maintenant vous connecter.'
-        }, status=status.HTTP_200_OK)
-    else:
-        return Response({
-            'error': 'Lien d\'activation invalide ou expiré.'
+            'success': False,
+            'error': 'Token invalide.'
         }, status=status.HTTP_400_BAD_REQUEST)
