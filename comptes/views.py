@@ -402,11 +402,38 @@ class InscriptionView(APIView):
             } if tenant else None
         }, status=status.HTTP_201_CREATED)
 
-
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def verify_email(request, token):
-    print(f"🔍 Vérification email avec token: {token}")
+    print(f" Vérification email avec token: {token}")
+    
+    frontend_url = "https://trimedh.vercel.app"
+    
+    try:
+        token_obj = EmailVerificationToken.objects.get(token=token)
+        
+        if token_obj.is_valid():
+            print(f" Token valide pour: {token_obj.utilisateur.email}")
+            
+            # Activer le compte
+            token_obj.verified_at = timezone.now()
+            token_obj.utilisateur.is_active = True
+            token_obj.utilisateur.save()
+            token_obj.save()
+            redirect_url = f"{frontend_url}/connexion?verification=success&email={token_obj.utilisateur.email}"
+            return redirect(redirect_url)
+            
+        else:
+            print("Token expiré ou invalide")
+            # Rediriger vers connexion avec erreur
+            redirect_url = f"{frontend_url}/connexion?verification=error&message=token_expired"
+            return redirect(redirect_url)
+            
+    except EmailVerificationToken.DoesNotExist:
+        print(" Token non trouvé")
+        redirect_url = f"{frontend_url}/connexion?verification=error&message=invalid_token"
+        return redirect(redirect_url)
+    print(f" Vérification email avec token: {token}")
     
     try:
         token_obj = EmailVerificationToken.objects.get(token=token)

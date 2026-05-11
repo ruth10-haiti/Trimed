@@ -71,7 +71,6 @@ class UtilisateurSerializer(serializers.ModelSerializer):
         return utilisateur
 
     def update(self, instance, validated_data):
-        """UPDATE — hash mdp si li chanje"""
         password = validated_data.pop('password', None)
         instance = super().update(instance, validated_data)
         if password:
