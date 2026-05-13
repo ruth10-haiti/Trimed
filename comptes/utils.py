@@ -68,16 +68,15 @@ def send_verification_email(user, token):
     </html>
     """
     
-    # ✅ CORRECTION : Utiliser l'expéditeur par défaut de Brevo qui fonctionne
-    # (trimedhaiti@11192404.brevosend.com est déjà vérifié par Brevo)
+    # ✅ UTILISER L'EXPÉDITEUR VÉRIFIÉ
     headers = {
         'api-key': settings.BREVO_API_KEY,
         'Content-Type': 'application/json'
     }
     
     data = {
-        # ✅ CHANGEMENT IMPORTANT : Utiliser l'expéditeur par défaut de Brevo
-        'sender': {'email': 'trimedhaiti@11192404.brevosend.com', 'name': 'TriMedHaiti'},
+        # ✅ CORRECTION : Utiliser l'email Gmail vérifié
+        'sender': {'email': 'trimedhaiti@gmail.com', 'name': 'Trimedhservice'},
         'to': [{'email': user.email, 'name': user.nom_complet}],
         'subject': subject,
         'htmlContent': html_message,
@@ -88,7 +87,6 @@ def send_verification_email(user, token):
         response = requests.post('https://api.brevo.com/v3/smtp/email', json=data, headers=headers)
         print(f"✅ Email envoyé à {user.email} - Status: {response.status_code}")
         
-        # Afficher plus de détails en cas d'erreur
         if response.status_code != 201:
             print(f"   Réponse Brevo: {response.text}")
             
