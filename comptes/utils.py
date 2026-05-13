@@ -5,8 +5,8 @@ def send_verification_email(user, token):
     """
     Envoie un email de vérification à l'utilisateur
     """
-    # Backend URL (pour la vérification API)
-    backend_url = "https://trimedh-service.onrender.com"
+    # Utiliser BACKEND_URL depuis settings
+    backend_url = getattr(settings, 'BACKEND_URL', 'https://trimedh-service.onrender.com')
     verification_link = f"{backend_url}/api/comptes/verify-email/{token}/"
     
     subject = "Vérifiez votre email - TriMedHaiti"
@@ -84,5 +84,5 @@ def send_verification_email(user, token):
         print(f" Email envoyé à {user.email} - Status: {response.status_code}")
         return response.status_code == 201
     except Exception as e:
-        print(f" Erreur envoi email: {e}")
+        print(f"Erreur envoi email: {e}")
         return False

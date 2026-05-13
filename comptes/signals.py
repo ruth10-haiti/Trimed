@@ -1,7 +1,7 @@
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.conf import settings
-from .models import Utilisateur, EmailVerificationToken
+from .models import Utilisateur
 import logging
 from django.utils import timezone
 
@@ -58,6 +58,5 @@ def logger_modification_utilisateur(sender, instance, **kwargs):
     """
     Logger les modifications d'utilisateurs
     """
-    # Log seulement pour les modifications importantes
     if not kwargs.get('created'):
         logger.info(f"Utilisateur modifié: {instance.email} (ID: {instance.pk})")
