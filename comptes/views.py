@@ -11,14 +11,10 @@ from .utils import send_verification_email
 import threading
 import json
 from django.db import transaction
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, redirect
 from .serializers import InscriptionSerializer   
 from .models import Utilisateur, EmailVerificationToken
-from .utils import send_verification_email  
 from datetime import timedelta
-from .models import Utilisateur, EmailVerificationToken
-from django.shortcuts import get_object_or_404, redirect
-from django.contrib import messages
 from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes
 from .serializers import (
@@ -50,7 +46,6 @@ class UtilisateurViewSet(viewsets.ModelViewSet):
             permission_classes = [IsAuthenticated, PeutModifierUtilisateur]
         elif self.action == 'retrieve':
             permission_classes = [IsAuthenticated]
-        # Dans get_permissions() du UtilisateurViewSet
         elif self.action == 'list':
             permission_classes = [IsAuthenticated, EstAdminSysteme | EstProprietaireHopital | EstMedecin]
         return [permission() for permission in permission_classes]
@@ -201,119 +196,9 @@ class LogoutView(APIView):
             )
 
 
-# class InscriptionView(APIView):
-#     """Vue pour l'inscription des hôpitaux"""
-
-#     permission_classes = [AllowAny]
-
-#     def post(self, request):
-#         serializer = InscriptionSerializer(data=request.data)
-
-#         if serializer.is_valid():
-#             utilisateur = serializer.save()
-
-#             # Générer les tokens JWT
-#             refresh = RefreshToken.for_user(utilisateur)
-#             user_serializer = UtilisateurSerializer(utilisateur)
-#             user_data = user_serializer.data
-
-#             return Response({
-#                 'refresh': str(refresh),
-#                 'access': str(refresh.access_token),
-#                 # ✅ 'user' pou match ak React
-#                 'user': user_data,
-#                 'tenant': user_data.get('hopital_detail'),
-#                 'message': 'Inscription réussie'
-#             }, status=status.HTTP_201_CREATED)
-
-#         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-# @api_view(['GET'])
-# @permission_classes([AllowAny])
-# def verify_email(request, token):
-#     token_obj = get_object_or_404(EmailVerificationToken, token=token)
-#     if token_obj.is_valid():
-#         token_obj.verified_at = timezone.now()
-#         token_obj.utilisateur.is_active = True
-#         token_obj.utilisateur.save()
-#         token_obj.save()
-#         return Response({'message': 'Email vérifié avec succès.Vous pouvez vous connecter.'}, status=status.HTTP_200_OK)
-#     else:
-#         return Response({'error': 'Lien invalide ou expiré'}, status=status.HTTP_400_BAD_REQUEST)
-    
-   #le meilleur 
-# class InscriptionView(APIView):
-#     permission_classes = [AllowAny]
-
-#     def post(self, request):
-#         serializer = InscriptionSerializer(data=request.data)
-#         if serializer.is_valid():
-#             utilisateur = serializer.save()  # is_active=False par défaut
-
-#             # Créer un token de vérification valable 24h
-#             token_obj = EmailVerificationToken.objects.create(
-#                 utilisateur=utilisateur,
-#                 expire_le=timezone.now() + timedelta(hours=24)
-#             )
-            
-#             # Envoyer l'email
-#             email_sent = send_verification_email(utilisateur, token_obj.token)
-#             if not email_sent:
-#                 # Log l'erreur mais on continue (l'utilisateur pourra demander un nouveau lien)
-#                 pass
-
-#             return Response({
-#                 'success': True,
-#                 'message': 'Inscription réussie. Un email de vérification vous a été envoyé.'
-#             }, status=status.HTTP_201_CREATED)
-#         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-# class InscriptionView(APIView):
-#     permission_classes = [AllowAny]
-
-#     def post(self, request):
-#         serializer = InscriptionSerializer(data=request.data)
-#         if serializer.is_valid():
-#             utilisateur = serializer.save()  # is_active=False
-
-#             # Créer token de vérification
-#             token_obj = EmailVerificationToken.objects.create(
-#                 utilisateur=utilisateur,
-#                 expires_at=timezone.now() + timedelta(hours=24)
-#             )
-
-#             # Envoi asynchrone (ne bloque pas le worker)
-#             threading.Thread(
-#                 target=send_verification_email,
-#                 args=(utilisateur, str(token_obj.token)),
-#                 daemon=True
-#             ).start()
-
-#             return Response({
-#                 'success': True,
-#                 'message': 'Inscription réussie. Vérifiez vos emails.'
-#             }, status=status.HTTP_201_CREATED)
-#         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-# @api_view(['GET'])
-# @permission_classes([AllowAny])
-# def verify_email(request, token):
-#     token_obj = get_object_or_404(EmailVerificationToken, token=token)
-#     if token_obj.is_valid():
-#         token_obj.verified_at = timezone.now()
-#         token_obj.utilisateur.is_active = True
-#         token_obj.utilisateur.save()
-#         token_obj.save()
-#         return Response({
-#             'message': 'Email vérifié avec succès. Vous pouvez maintenant vous connecter.'
-#         }, status=status.HTTP_200_OK)
-#     else:
-#         return Response({
-#             'error': 'Lien d\'activation invalide ou expiré.'
-#         }, status=status.HTTP_400_BAD_REQUEST)
-      # à créer (envoi asynchrone)
-
-
 class InscriptionView(APIView):
+    """Vue pour l'inscription des hôpitaux avec vérification email"""
+    
     permission_classes = [AllowAny]
 
     @transaction.atomic
@@ -326,7 +211,7 @@ class InscriptionView(APIView):
         # 2. Création de l'utilisateur (is_active=False par défaut)
         utilisateur = serializer.save()
 
-        # 3. Forcer le rôle (par exemple propriétaire d'hôpital) et désactiver le compte
+        # 3. Forcer le rôle (propriétaire d'hôpital) et désactiver le compte
         utilisateur.role = 'proprietaire-hopital'
         utilisateur.is_active = False
         utilisateur.save(update_fields=['role', 'is_active'])
@@ -345,7 +230,7 @@ class InscriptionView(APIView):
 
         tenant = None
         if hopital_data:
-            from gestion_tenants.models import Tenant   # adapte l'import selon ton projet
+            from gestion_tenants.models import Tenant
             nombre_lits = int(hopital_data.get('nombre_de_lits', 1))
             if nombre_lits < 1:
                 nombre_lits = 1
@@ -372,7 +257,7 @@ class InscriptionView(APIView):
         # 5. Créer un token de vérification email (expiration 24h)
         token_obj = EmailVerificationToken.objects.create(
             utilisateur=utilisateur,
-            expires_at=timezone.now() + timedelta(hours=24)   # champ 'expires_at'
+            expires_at=timezone.now() + timedelta(hours=24)
         )
 
         # 6. Envoi de l'email en arrière‑plan (ne bloque pas la réponse)
@@ -402,10 +287,14 @@ class InscriptionView(APIView):
             } if tenant else None
         }, status=status.HTTP_201_CREATED)
 
+
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def verify_email(request, token):
-    print(f" Vérification email avec token: {token}")
+    """
+    Vérification d'email - Redirige vers le frontend Vercel
+    """
+    print(f"🔍 Vérification email avec token: {token}")
     
     frontend_url = "https://trimedh.vercel.app"
     
@@ -420,11 +309,13 @@ def verify_email(request, token):
             token_obj.utilisateur.is_active = True
             token_obj.utilisateur.save()
             token_obj.save()
+            
+            # Rediriger vers la page de connexion du frontend avec succès
             redirect_url = f"{frontend_url}/connexion?verification=success&email={token_obj.utilisateur.email}"
             return redirect(redirect_url)
             
         else:
-            print("Token expiré ou invalide")
+            print(" Token expiré ou invalide")
             # Rediriger vers connexion avec erreur
             redirect_url = f"{frontend_url}/connexion?verification=error&message=token_expired"
             return redirect(redirect_url)
@@ -433,34 +324,3 @@ def verify_email(request, token):
         print(" Token non trouvé")
         redirect_url = f"{frontend_url}/connexion?verification=error&message=invalid_token"
         return redirect(redirect_url)
-    print(f" Vérification email avec token: {token}")
-    
-    try:
-        token_obj = EmailVerificationToken.objects.get(token=token)
-        print(f" Token trouvé pour: {token_obj.utilisateur.email}")
-        
-        if token_obj.is_valid():
-            print("Token valide, activation du compte...")
-            token_obj.verified_at = timezone.now()
-            token_obj.utilisateur.is_active = True
-            token_obj.utilisateur.save()
-            token_obj.save()
-            
-            # Rediriger vers le frontend avec succès
-            return Response({
-                'success': True,
-                'message': 'Email vérifié avec succès. Vous pouvez maintenant vous connecter.'
-            }, status=status.HTTP_200_OK)
-        else:
-            print(" Token expiré ou déjà utilisé")
-            return Response({
-                'success': False,
-                'error': 'Lien d\'activation invalide ou expiré.'
-            }, status=status.HTTP_400_BAD_REQUEST)
-            
-    except EmailVerificationToken.DoesNotExist:
-        print(" Token non trouvé")
-        return Response({
-            'success': False,
-            'error': 'Token invalide.'
-        }, status=status.HTTP_400_BAD_REQUEST)
