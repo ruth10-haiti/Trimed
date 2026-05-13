@@ -4,12 +4,14 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.views import TokenRefreshView
 from django_filters.rest_framework import DjangoFilterBackend
+from django.contrib.auth import authenticate
 from .utils import send_verification_email
 import threading
 import json
 from django.db import transaction
-from django.shortcuts import redirect
+from django.shortcuts import get_object_or_404, redirect
 from .serializers import InscriptionSerializer   
 from .models import Utilisateur, EmailVerificationToken
 from datetime import timedelta
@@ -313,12 +315,12 @@ def verify_email(request, token):
             return redirect(redirect_url)
             
         else:
-            print(" Token expiré ou invalide")
+            print("Token expiré ou invalide")
             # Rediriger vers connexion avec erreur
             redirect_url = f"{frontend_url}/connexion?verification=error&message=token_expired"
             return redirect(redirect_url)
             
     except EmailVerificationToken.DoesNotExist:
-        print(" Token non trouvé")
+        print("Token non trouvé")
         redirect_url = f"{frontend_url}/connexion?verification=error&message=invalid_token"
         return redirect(redirect_url)
