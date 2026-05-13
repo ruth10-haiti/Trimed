@@ -5,7 +5,7 @@ def send_verification_email(user, token):
     """
     Envoie un email de vérification à l'utilisateur
     """
-    # Utiliser BACKEND_URL depuis settings
+    # Backend URL pour le lien de vérification
     backend_url = getattr(settings, 'BACKEND_URL', 'https://trimedh-service.onrender.com')
     verification_link = f"{backend_url}/api/comptes/verify-email/{token}/"
     
@@ -22,6 +22,9 @@ def send_verification_email(user, token):
     Ce lien expire dans 24h.
     
     Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.
+    
+    Cordialement,
+    L'équipe TriMedHaiti
     """
     
     html_message = f"""
@@ -65,14 +68,16 @@ def send_verification_email(user, token):
     </html>
     """
     
-    # Envoi via Brevo
+    # ✅ CORRECTION : Utiliser l'expéditeur par défaut de Brevo qui fonctionne
+    # (trimedhaiti@11192404.brevosend.com est déjà vérifié par Brevo)
     headers = {
         'api-key': settings.BREVO_API_KEY,
         'Content-Type': 'application/json'
     }
     
     data = {
-        'sender': {'email': 'noreply@trimedhaiti.com', 'name': 'TriMedHaiti'},
+        # ✅ CHANGEMENT IMPORTANT : Utiliser l'expéditeur par défaut de Brevo
+        'sender': {'email': 'trimedhaiti@11192404.brevosend.com', 'name': 'TriMedHaiti'},
         'to': [{'email': user.email, 'name': user.nom_complet}],
         'subject': subject,
         'htmlContent': html_message,
@@ -81,8 +86,13 @@ def send_verification_email(user, token):
     
     try:
         response = requests.post('https://api.brevo.com/v3/smtp/email', json=data, headers=headers)
-        print(f" Email envoyé à {user.email} - Status: {response.status_code}")
+        print(f"✅ Email envoyé à {user.email} - Status: {response.status_code}")
+        
+        # Afficher plus de détails en cas d'erreur
+        if response.status_code != 201:
+            print(f"   Réponse Brevo: {response.text}")
+            
         return response.status_code == 201
     except Exception as e:
-        print(f"Erreur envoi email: {e}")
+        print(f"❌ Erreur envoi email: {e}")
         return False
