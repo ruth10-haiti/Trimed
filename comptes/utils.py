@@ -1,18 +1,13 @@
 import requests
 from django.conf import settings
-from django.urls import reverse
 
 def send_verification_email(user, token):
+    """
+    Envoie un email de vérification à l'utilisateur
+    """
     # Backend URL (pour la vérification API)
     backend_url = "https://trimedh-service.onrender.com"
     verification_link = f"{backend_url}/api/comptes/verify-email/{token}/"
-    
-    # Frontend URL (pour rediriger l'utilisateur après vérification)
-    frontend_url = "https://trimedh.vercel.app"
-    
-    # Le lien que l'utilisateur clique - appelle d'abord le backend, puis redirige
-    # Solution 1: Le backend redirige vers le frontend après vérification
-    # Solution 2: Le frontend appelle l'API de vérification avec le token
     
     subject = "Vérifiez votre email - TriMedHaiti"
     
@@ -22,7 +17,7 @@ def send_verification_email(user, token):
     Veuillez cliquer sur le lien pour activer votre compte :
     {verification_link}
     
-    Aprés vérification, vous serez redirigé vers la page de connexion.
+    Après vérification, vous serez redirigé vers la page de connexion.
     
     Ce lien expire dans 24h.
     
@@ -86,8 +81,8 @@ def send_verification_email(user, token):
     
     try:
         response = requests.post('https://api.brevo.com/v3/smtp/email', json=data, headers=headers)
-        print(f"✅ Email envoyé à {user.email} - Status: {response.status_code}")
+        print(f" Email envoyé à {user.email} - Status: {response.status_code}")
         return response.status_code == 201
     except Exception as e:
-        print(f"❌ Erreur envoi email: {e}")
+        print(f" Erreur envoi email: {e}")
         return False
