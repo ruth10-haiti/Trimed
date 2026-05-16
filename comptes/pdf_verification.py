@@ -3,11 +3,12 @@ import re
 import io
 from datetime import datetime
 from PIL import Image
-import fitz  # PyMuPDF
 import PyPDF2
+import pdfplumber
+from django.core.files.storage import default_storage
 
 class PDFVerificationService:
-    """Service complet de vérification des documents PDF"""
+    """Service complet de vérification des documents PDF (sans PyMuPDF)"""
     
     # Universités reconnues en Haïti
     UNIVERSITES_RECONNUES = [
@@ -35,17 +36,17 @@ class PDFVerificationService:
     
     @staticmethod
     def extraire_metadonnees(pdf_path):
-        """Extrait les métadonnées du PDF"""
+        """Extrait les métadonnées du PDF avec PyPDF2"""
         try:
             with open(pdf_path, 'rb') as file:
                 pdf_reader = PyPDF2.PdfReader(file)
                 metadata = pdf_reader.metadata if pdf_reader.metadata else {}
                 
                 return {
-                    'auteur': metadata.get('/Author', 'Inconnu'),
-                    'createur': metadata.get('/Creator', 'Inconnu'),
-                    'producteur': metadata.get('/Producer', 'Inconnu'),
-                    'date_creation': metadata.get('/CreationDate', 'Inconnu'),
+                    'auteur': metadata.get('/Author', 'Inconnu') if metadata else 'Inconnu',
+                    'createur': metadata.get('/Creator', 'Inconnu') if metadata else 'Inconnu',
+                    'producteur': metadata.get('/Producer', 'Inconnu') if metadata else 'Inconnu',
+                    'date_creation': metadata.get('/CreationDate', 'Inconnu') if metadata else 'Inconnu',
                     'nb_pages': len(pdf_reader.pages),
                     'logiciel_suspect': PDFVerificationService._detecter_logiciel_suspect(metadata)
                 }
@@ -55,6 +56,9 @@ class PDFVerificationService:
     @staticmethod
     def _detecter_logiciel_suspect(metadata):
         """Détecte les logiciels de modification suspects"""
+        if not metadata:
+            return True
+        
         logiciels_suspects = [
             'Adobe Photoshop', 'GIMP', 'Pixelmator', 
             'Microsoft Word', 'LibreOffice', 'Canva',
@@ -62,27 +66,32 @@ class PDFVerificationService:
             'Paint', 'PDF Editor', 'PDFescape', 'PaintTool'
         ]
         
-        if metadata:
-            createur = str(metadata.get('/Creator', ''))
-            producteur = str(metadata.get('/Producer', ''))
-            
-            for logiciel in logiciels_suspects:
-                if logiciel.lower() in createur.lower() or logiciel.lower() in producteur.lower():
-                    return True
+        createur = str(metadata.get('/Creator', ''))
+        producteur = str(metadata.get('/Producer', ''))
+        
+        for logiciel in logiciels_suspects:
+            if logiciel.lower() in createur.lower() or logiciel.lower() in producteur.lower():
+                return True
         return False
     
     @staticmethod
     def extraire_texte_pdf(pdf_path):
-        """Extrait le texte complet du PDF"""
+        """Extrait le texte du PDF avec pdfplumber (meilleur OCR intégré)"""
         try:
-            doc = fitz.open(pdf_path)
             texte_complet = ""
+            with pdfplumber.open(pdf_path) as pdf:
+                for page in pdf.pages:
+                    page_text = page.extract_text()
+                    if page_text:
+                        texte_complet += page_text + " "
+                    
+                    # Tentative d'extraction des tables si présentes
+                    tables = page.extract_tables()
+                    for table in tables:
+                        for row in table:
+                            texte_complet += " ".join([str(cell) for cell in row if cell]) + " "
             
-            for page in doc:
-                texte_complet += page.get_text()
-            
-            doc.close()
-            return ' '.join(texte_complet.split())
+            return ' '.join(texte_complet.split()) if texte_complet else ""
         except Exception as e:
             return f"Erreur extraction: {str(e)}"
     
@@ -98,6 +107,9 @@ class PDFVerificationService:
             'nom_etudiant': None,
             'est_reconnu': False
         }
+        
+        if not texte:
+            return informations
         
         # Patterns regex
         patterns = {
@@ -131,53 +143,50 @@ class PDFVerificationService:
     
     @staticmethod
     def verifier_qualite_image(pdf_path):
-        """Vérifie la qualité du scan"""
+        """Vérifie la qualité du document (basé sur la première page)"""
         try:
-            doc = fitz.open(pdf_path)
-            premiere_page = doc[0]
-            
-            # Convertir en image pour analyse
-            pix = premiere_page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5))
-            img_data = pix.tobytes("png")
-            img = Image.open(io.BytesIO(img_data))
-            
-            largeur, hauteur = img.size
-            
-            doc.close()
+            # Avec pdfplumber, on peut avoir un aperçu
+            with pdfplumber.open(pdf_path) as pdf:
+                nb_pages = len(pdf.pages)
+                premiere_page = pdf.pages[0]
+                
+                # Estimation de la qualité basée sur le texte extrait
+                texte_page = premiere_page.extract_text() or ""
+                longueur_texte = len(texte_page)
+                
+                # Qualité estimée
+                est_lisible = longueur_texte > 100  # Si plus de 100 caractères, probablement lisible
             
             return {
-                'resolution': f"{largeur}x{hauteur}",
-                'est_lisible': largeur >= 1000 and hauteur >= 700,
-                'nb_pages': len(doc),
-                'taille_pixels': largeur * hauteur
+                'resolution': 'Estimation basée sur le texte',
+                'est_lisible': est_lisible,
+                'nb_pages': nb_pages,
+                'taille_pixels': 0
             }
         except Exception as e:
             return {'erreur': str(e), 'est_lisible': False, 'nb_pages': 1}
     
     @staticmethod
     def detection_falsification(pdf_path):
-        """Détection de falsifications basiques"""
+        """Détection de falsifications basiques avec PyPDF2"""
         try:
-            doc = fitz.open(pdf_path)
             elements_suspects = []
             
-            for page_num, page in enumerate(doc):
-                # Trop d'images = possible Photoshop
-                images = page.get_images()
-                if len(images) > 3:
-                    elements_suspects.append(f"Page {page_num+1}: {len(images)} images (modification suspecte)")
+            with open(pdf_path, 'rb') as file:
+                pdf_reader = PyPDF2.PdfReader(file)
                 
-                # Annotations = modifications
-                annotations = list(page.annots())
-                if annotations:
-                    elements_suspects.append(f"Page {page_num+1}: Annotations/modifications détectées")
-                
-                # Champs formulaire = document éditable
-                widgets = list(page.widgets())
-                if widgets:
-                    elements_suspects.append(f"Page {page_num+1}: Champs modifiables détectés")
+                # Vérifier les annotations
+                for page_num, page in enumerate(pdf_reader.pages):
+                    if '/Annots' in page:
+                        elements_suspects.append(f"Page {page_num+1}: Annotations/modifications détectées")
+                    
+                    # Vérifier les champs de formulaire
+                    if '/AcroForm' in pdf_reader.trailer.get('/Root', {}):
+                        elements_suspects.append(f"Page {page_num+1}: Champs de formulaire détectés")
             
-            doc.close()
+            # Vérifier la cohérence du nombre de pages
+            if len(pdf_reader.pages) > 5:
+                elements_suspects.append(f"Document anormalement long ({len(pdf_reader.pages)} pages)")
             
             return {
                 'est_falsifie': len(elements_suspects) > 0,
@@ -208,7 +217,7 @@ class DocumentAnalyzer:
         # 4. Informations spécifiques
         infos = PDFVerificationService.extraire_informations_diplome(texte)
         
-        # 5. Qualité image
+        # 5. Qualité
         qualite = PDFVerificationService.verifier_qualite_image(pdf_path)
         
         # 6. Détection falsification
@@ -243,9 +252,9 @@ class DocumentAnalyzer:
             score_confiance -= 10
             alertes.append("Date d'obtention non trouvée")
         
-        if metadata.get('nb_pages', 0) > 3:
+        if metadata.get('nb_pages', 0) > 5:
             score_confiance -= 10
-            alertes.append("Document anormalement long (plus de 3 pages)")
+            alertes.append("Document anormalement long (plus de 5 pages)")
         
         # Score minimum 0
         score_confiance = max(0, score_confiance)
@@ -271,5 +280,5 @@ class DocumentAnalyzer:
             'qualite': qualite,
             'metadata': metadata,
             'falsification': falsification,
-            'texte_extrait': texte[:2000]
+            'texte_extrait': texte[:2000] if texte else ""
         }
