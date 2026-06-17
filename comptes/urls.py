@@ -20,6 +20,4 @@ urlpatterns = [
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('token/verify/', TokenVerifyView.as_view(), name='token_verify'),
     path('verify-email/<uuid:token>/', verify_email, name='verify-email'),
-    
-    path('admin/', include('comptes.verification_urls')),
-]
+    ]

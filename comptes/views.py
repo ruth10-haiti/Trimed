@@ -7,7 +7,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenRefreshView
 from django_filters.rest_framework import DjangoFilterBackend
 from django.contrib.auth import authenticate
-from .utils import send_verification_email
+from .utils import send_verification_email  # ✅ Utilise Brevo
 import threading
 import json
 from django.db import transaction
@@ -28,9 +28,7 @@ from .permissions import (
 
 
 class UtilisateurViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet pour la gestion des utilisateurs
-    """
+    """ViewSet pour la gestion des utilisateurs"""
     queryset = Utilisateur.objects.all()
     serializer_class = UtilisateurSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
@@ -39,7 +37,6 @@ class UtilisateurViewSet(viewsets.ModelViewSet):
     ordering_fields = ['nom_complet', 'cree_le', 'derniere_connexion']
 
     def get_permissions(self):
-        """Permissions personnalisées selon l'action"""
         if self.action == 'create':
             permission_classes = [IsAuthenticated, EstAdminSysteme | EstProprietaireHopital]
         elif self.action in ['update', 'partial_update', 'destroy']:
@@ -50,9 +47,7 @@ class UtilisateurViewSet(viewsets.ModelViewSet):
             permission_classes = [IsAuthenticated, EstAdminSysteme | EstProprietaireHopital | EstMedecin]
         return [permission() for permission in permission_classes]
     
-
     def get_queryset(self):
-        """Filtrer les utilisateurs selon les permissions"""
         queryset = super().get_queryset()
         user = self.request.user
 
@@ -74,18 +69,15 @@ class UtilisateurViewSet(viewsets.ModelViewSet):
         return Utilisateur.objects.none()
 
     def perform_create(self, serializer):
-        """Surcharge pour enregistrer qui a créé l'utilisateur"""
         serializer.save(modifie_par=self.request.user)
 
     @action(detail=False, methods=['get'])
     def profile(self, request):
-        """Récupérer le profil de l'utilisateur connecté"""
         serializer = self.get_serializer(request.user)
         return Response(serializer.data)
 
     @action(detail=False, methods=['put', 'patch'])
     def update_profile(self, request):
-        """Mettre à jour le profil de l'utilisateur connecté"""
         serializer = UpdateProfileSerializer(
             request.user,
             data=request.data,
@@ -98,7 +90,6 @@ class UtilisateurViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def change_password(self, request, pk=None):
-        """Changer le mot de passe d'un utilisateur"""
         utilisateur = self.get_object()
 
         if utilisateur != request.user and not (
@@ -126,7 +117,6 @@ class UtilisateurViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def toggle_active(self, request, pk=None):
-        """Activer/désactiver un utilisateur"""
         utilisateur = self.get_object()
 
         if request.user.role not in ['admin-systeme', 'proprietaire-hopital']:
@@ -156,10 +146,7 @@ class LoginView(APIView):
         if serializer.is_valid():
             utilisateur = serializer.validated_data['utilisateur']
 
-            # Générer les tokens JWT
             refresh = RefreshToken.for_user(utilisateur)
-
-            # Sérialiser les données utilisateur
             user_serializer = UtilisateurSerializer(utilisateur)
             user_data = user_serializer.data
 
@@ -197,26 +184,22 @@ class LogoutView(APIView):
 
 
 class InscriptionView(APIView):
-    """Vue pour l'inscription des hôpitaux avec vérification email"""
+    """Vue pour l'inscription des hôpitaux avec vérification email via Brevo"""
     
     permission_classes = [AllowAny]
 
     @transaction.atomic
     def post(self, request):
-        # 1. Validation des données utilisateur
         serializer = InscriptionSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        # 2. Création de l'utilisateur (is_active=False par défaut)
         utilisateur = serializer.save()
 
-        # 3. Forcer le rôle (propriétaire d'hôpital) et désactiver le compte
         utilisateur.role = 'proprietaire-hopital'
-        utilisateur.is_active = False
+        utilisateur.is_active = False  # ✅ Désactivé en attente de vérification email
         utilisateur.save(update_fields=['role', 'is_active'])
 
-        # 4. Récupération des données de l'hôpital (tenant) – optionnel
         hopital_data_raw = request.data.get('hopital_data')
         hopital_data = None
         if hopital_data_raw:
@@ -245,29 +228,26 @@ class InscriptionView(APIView):
                 numero_enregistrement=hopital_data.get('numero_enregistrement', ''),
                 statut='inactif',
                 type_abonnement=hopital_data.get('type_abonnement', 'basic'),
-                statut_verification_document='en_attente',
                 nom_schema_base_de_donnees=hopital_data.get('nom_schema_base_de_donnees', ''),
                 proprietaire_utilisateur=utilisateur,
                 cree_par_utilisateur=utilisateur,
             )
-            # Associer le tenant à l'utilisateur
             utilisateur.hopital = tenant
             utilisateur.save(update_fields=['hopital'])
 
-        # 5. Créer un token de vérification email (expiration 24h)
+        # ✅ CRÉATION DU TOKEN POUR EMAIL
         token_obj = EmailVerificationToken.objects.create(
             utilisateur=utilisateur,
             expires_at=timezone.now() + timedelta(hours=24)
         )
 
-        # 6. Envoi de l'email en arrière‑plan (ne bloque pas la réponse)
+        # ✅ ENVOI EMAIL VIA BREVO (thread séparé)
         threading.Thread(
             target=send_verification_email,
             args=(utilisateur, str(token_obj.token)),
             daemon=True
         ).start()
 
-        # 7. Réponse finale (pas de token JWT car compte inactif)
         return Response({
             'success': True,
             'message': 'Inscription réussie. Vérifiez votre email pour activer votre compte.',
@@ -292,7 +272,8 @@ class InscriptionView(APIView):
 @permission_classes([AllowAny])
 def verify_email(request, token):
     """
-    Vérification d'email - Redirige vers le frontend Vercel
+    ✅ CONSERVÉ : Vérification d'email avec Brevo
+    Redirige vers le frontend Vercel
     """
     print(f"🔍 Vérification email avec token: {token}")
     
@@ -302,25 +283,23 @@ def verify_email(request, token):
         token_obj = EmailVerificationToken.objects.get(token=token)
         
         if token_obj.is_valid():
-            print(f" Token valide pour: {token_obj.utilisateur.email}")
+            print(f"✅ Token valide pour: {token_obj.utilisateur.email}")
             
-            # Activer le compte
+            # ✅ Activer le compte
             token_obj.verified_at = timezone.now()
             token_obj.utilisateur.is_active = True
             token_obj.utilisateur.save()
             token_obj.save()
             
-            # Rediriger vers la page de connexion du frontend avec succès
             redirect_url = f"{frontend_url}/connexion?verification=success&email={token_obj.utilisateur.email}"
             return redirect(redirect_url)
             
         else:
-            print("Token expiré ou invalide")
-            # Rediriger vers connexion avec erreur
+            print("❌ Token expiré ou invalide")
             redirect_url = f"{frontend_url}/connexion?verification=error&message=token_expired"
             return redirect(redirect_url)
             
     except EmailVerificationToken.DoesNotExist:
-        print("Token non trouvé")
+        print("❌ Token non trouvé")
         redirect_url = f"{frontend_url}/connexion?verification=error&message=invalid_token"
         return redirect(redirect_url)
