@@ -1,19 +1,27 @@
+# rendez_vous/serializers.py
 from rest_framework import serializers
 from django.utils import timezone
 from datetime import datetime, timedelta
 from .models import RendezVous, RendezVousType, RendezVousStatut
 
+
 class RendezVousTypeSerializer(serializers.ModelSerializer):
+    """Serializer pour les types de rendez-vous - utilisé dans les dropdowns"""
+    
     class Meta:
         model = RendezVousType
-        fields = '__all__'
+        fields = ['type_id', 'nom', 'description', 'duree_defaut', 'couleur']
         read_only_fields = ['type_id', 'created_at', 'updated_at']
 
+
 class RendezVousStatutSerializer(serializers.ModelSerializer):
+    """Serializer pour les statuts de rendez-vous - utilisé dans les dropdowns"""
+    
     class Meta:
         model = RendezVousStatut
-        fields = '__all__'
+        fields = ['statut_id', 'nom', 'description', 'couleur', 'est_annule', 'est_confirme', 'est_termine']
         read_only_fields = ['statut_id', 'created_at', 'updated_at']
+
 
 class RendezVousListSerializer(serializers.ModelSerializer):
     """Serializer simplifié pour la liste des rendez-vous"""
@@ -34,6 +42,7 @@ class RendezVousListSerializer(serializers.ModelSerializer):
             'patient_nom', 'patient_prenom', 'medecin_nom', 'medecin_prenom',
             'type_nom', 'statut_nom', 'statut_couleur', 'duree', 'date_fin'
         ]
+
 
 class RendezVousSerializer(serializers.ModelSerializer):
     """Serializer complet pour les rendez-vous"""
@@ -75,42 +84,35 @@ class RendezVousSerializer(serializers.ModelSerializer):
     
     def validate_date_heure(self, value):
         """Validation de la date et heure du rendez-vous"""
-        # Vérifier que la date n'est pas dans le passé
         if value < timezone.now():
             raise serializers.ValidationError("La date du rendez-vous ne peut pas être dans le passé")
         
-        # Vérifier les heures d'ouverture (8h-18h)
         if value.hour < 8 or value.hour >= 18:
             raise serializers.ValidationError("Les rendez-vous doivent être entre 8h et 18h")
         
-        # Vérifier que ce n'est pas un dimanche
-        if value.weekday() == 6:  # 6 = dimanche
+        if value.weekday() == 6:
             raise serializers.ValidationError("Pas de rendez-vous le dimanche")
         
         return value
     
     def validate(self, data):
         """Validation globale du rendez-vous"""
-        # Vérifier la disponibilité du médecin
         if 'medecin' in data and 'date_heure' in data:
             medecin = data['medecin']
             date_heure = data['date_heure']
             
-            # Calculer la durée du RDV
-            duree = 30  # durée par défaut
+            duree = 30
             if 'type' in data and data['type']:
                 duree = data['type'].duree_defaut
             
             date_fin = date_heure + timedelta(minutes=duree)
             
-            # Vérifier les conflits
             conflits = RendezVous.objects.filter(
                 medecin=medecin,
                 statut__est_annule=False,
                 date_heure__lt=date_fin,
             ).exclude(pk=self.instance.pk if self.instance else None)
             
-            # Vérifier si il y a chevauchement
             for rdv in conflits:
                 rdv_fin = rdv.date_heure + timedelta(minutes=rdv.duree)
                 if date_heure < rdv_fin:
@@ -120,6 +122,7 @@ class RendezVousSerializer(serializers.ModelSerializer):
         
         return data
 
+
 class CreneauDisponibleSerializer(serializers.Serializer):
     """Serializer pour les créneaux disponibles"""
     date = serializers.DateField()
@@ -128,9 +131,10 @@ class CreneauDisponibleSerializer(serializers.Serializer):
     disponible = serializers.BooleanField()
     duree = serializers.IntegerField()
 
+
 class RendezVousCreateSerializer(serializers.ModelSerializer):
-    type = serializers.SlugRelatedField(slug_field='nom', queryset=RendezVousType.objects.all())
-    statut = serializers.SlugRelatedField(slug_field='nom', queryset=RendezVousStatut.objects.all(), required=False)
+    type = serializers.PrimaryKeyRelatedField(queryset=RendezVousType.objects.all(), required=False, allow_null=True)
+    statut = serializers.PrimaryKeyRelatedField(queryset=RendezVousStatut.objects.all(), required=False, allow_null=True)
 
     class Meta:
         model = RendezVous
@@ -138,12 +142,16 @@ class RendezVousCreateSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         validated_data['tenant'] = self.context['request'].user.hopital
-        if 'statut' not in validated_data:
-            # Valeur par défaut si non fourni
+        if 'statut' not in validated_data or not validated_data['statut']:
             statut_defaut, _ = RendezVousStatut.objects.get_or_create(
                 tenant=validated_data['tenant'],
                 nom='Planifié',
-                defaults={'couleur': '#3498db', 'est_confirme': False}
+                defaults={
+                    'couleur': '#3498db',
+                    'est_confirme': False,
+                    'est_annule': False,
+                    'est_termine': False
+                }
             )
             validated_data['statut'] = statut_defaut
         return super().create(validated_data)

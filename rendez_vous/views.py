@@ -17,58 +17,66 @@ from comptes.permissions import EstMedecin, EstPersonnel, EstPatient, EstAdminSy
 
 class RendezVousTypeViewSet(viewsets.ModelViewSet):
     """ViewSet pour les types de rendez-vous"""
-    queryset = RendezVousType.objects.all()
     serializer_class = RendezVousTypeSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter]
     search_fields = ['nom', 'description']
+    http_method_names = ['get', 'post', 'put', 'patch', 'delete']
     
     def get_permissions(self):
-        if self.action in ['create', 'update', 'partial_update', 'destroy']:
-            permission_classes = [IsAuthenticated, EstAdminSysteme | EstProprietaireHopital | EstMedecin | EstPersonnel]
-        else:
+        if self.action in ['list', 'retrieve']:
             permission_classes = [IsAuthenticated]
+        else:
+            permission_classes = [IsAuthenticated, EstAdminSysteme | EstProprietaireHopital | EstMedecin | EstPersonnel]
         return [permission() for permission in permission_classes]
     
     def get_queryset(self):
-        queryset = super().get_queryset()
+        queryset = RendezVousType.objects.all()
         user = self.request.user
         
-        if user.hopital:
+        if user.is_authenticated and hasattr(user, 'hopital') and user.hopital:
             queryset = queryset.filter(tenant=user.hopital)
+        elif user.is_authenticated:
+            queryset = queryset.none()
         
         return queryset
     
     def perform_create(self, serializer):
+        if not hasattr(self.request.user, 'hopital') or not self.request.user.hopital:
+            raise serializers.ValidationError("Aucun hôpital associé à cet utilisateur")
         serializer.save(tenant=self.request.user.hopital)
 
 
 class RendezVousStatutViewSet(viewsets.ModelViewSet):
     """ViewSet pour les statuts de rendez-vous"""
-    queryset = RendezVousStatut.objects.all()
     serializer_class = RendezVousStatutSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter]
     search_fields = ['nom', 'description']
     filterset_fields = ['est_annule', 'est_confirme', 'est_termine']
+    http_method_names = ['get', 'post', 'put', 'patch', 'delete']
     
     def get_permissions(self):
-        if self.action in ['create', 'update', 'partial_update', 'destroy']:
-            permission_classes = [IsAuthenticated, EstAdminSysteme | EstProprietaireHopital | EstMedecin | EstPersonnel]
-        else:
+        if self.action in ['list', 'retrieve']:
             permission_classes = [IsAuthenticated]
+        else:
+            permission_classes = [IsAuthenticated, EstAdminSysteme | EstProprietaireHopital | EstMedecin | EstPersonnel]
         return [permission() for permission in permission_classes]
     
     def get_queryset(self):
-        queryset = super().get_queryset()
+        queryset = RendezVousStatut.objects.all()
         user = self.request.user
         
-        if user.hopital:
+        if user.is_authenticated and hasattr(user, 'hopital') and user.hopital:
             queryset = queryset.filter(tenant=user.hopital)
+        elif user.is_authenticated:
+            queryset = queryset.none()
         
         return queryset
     
     def perform_create(self, serializer):
+        if not hasattr(self.request.user, 'hopital') or not self.request.user.hopital:
+            raise serializers.ValidationError("Aucun hôpital associé à cet utilisateur")
         serializer.save(tenant=self.request.user.hopital)
 
 
@@ -94,21 +102,15 @@ class RendezVousViewSet(viewsets.ModelViewSet):
         """
         Permissions personnalisées selon l'action
         """
-        # ✅ CORRECTION: Les patients peuvent créer et gérer leurs rendez-vous
         if self.action == 'create':
-            # Les patients, médecins et personnel peuvent créer
             permission_classes = [IsAuthenticated, EstPatient | EstMedecin | EstPersonnel]
         elif self.action in ['update', 'partial_update']:
-            # Les patients peuvent modifier leurs propres rendez-vous
             permission_classes = [IsAuthenticated, EstPatient | EstMedecin | EstPersonnel]
         elif self.action == 'destroy':
-            # Admin, propriétaire, médecin et personnel peuvent supprimer
             permission_classes = [IsAuthenticated, EstAdminSysteme | EstProprietaireHopital | EstMedecin | EstPersonnel]
         elif self.action in ['confirmer', 'annuler', 'reporter']:
-            # Patients, médecins et personnel peuvent confirmer/annuler/reporter
             permission_classes = [IsAuthenticated, EstPatient | EstMedecin | EstPersonnel]
         elif self.action == 'rendez_vous_patient':
-            # Permissions pour l'action patient
             permission_classes = [IsAuthenticated, EstMedecin | EstPersonnel | EstAdminSysteme | EstProprietaireHopital]
         else:
             permission_classes = [IsAuthenticated]
@@ -118,25 +120,15 @@ class RendezVousViewSet(viewsets.ModelViewSet):
         queryset = super().get_queryset()
         user = self.request.user
         
-        # Filtrage par tenant
-        if user.hopital:
+        if user.is_authenticated and hasattr(user, 'hopital') and user.hopital:
             queryset = queryset.filter(tenant=user.hopital)
         
-        # ✅ CORRECTION: Filtrage par rôle
-        if user.role == 'patient' and hasattr(user, 'patient'):
-            # Patient: voit seulement ses propres rendez-vous
-            queryset = queryset.filter(patient=user.patient)
-        elif user.role == 'medecin' and hasattr(user, 'medecin'):
-            # Médecin: voit ses rendez-vous
-            queryset = queryset.filter(medecin=user.medecin)
-        elif user.role in ['admin-systeme', 'proprietaire-hopital']:
-            # Admin et propriétaire: voit tout
-            pass
-        else:
-            # Personnel: voit tous les rendez-vous de l'hôpital
-            pass
+        if user.is_authenticated:
+            if user.role == 'patient' and hasattr(user, 'patient'):
+                queryset = queryset.filter(patient=user.patient)
+            elif user.role == 'medecin' and hasattr(user, 'medecin'):
+                queryset = queryset.filter(medecin=user.medecin)
         
-        # Filtres par date
         date_debut = self.request.query_params.get('date_debut', None)
         date_fin = self.request.query_params.get('date_fin', None)
         
@@ -154,12 +146,10 @@ class RendezVousViewSet(viewsets.ModelViewSet):
             except ValueError:
                 pass
         
-        # Filtre aujourd'hui
         if self.request.query_params.get('aujourdhui', None) == 'true':
             aujourd_hui = timezone.now().date()
             queryset = queryset.filter(date_heure__date=aujourd_hui)
         
-        # Filtre cette semaine
         if self.request.query_params.get('cette_semaine', None) == 'true':
             aujourd_hui = timezone.now().date()
             debut_semaine = aujourd_hui - timedelta(days=aujourd_hui.weekday())
@@ -174,20 +164,16 @@ class RendezVousViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         user = self.request.user
         
-        # ✅ CORRECTION: Si c'est un patient, assigner automatiquement le patient
         if user.role == 'patient' and hasattr(user, 'patient'):
             serializer.save(tenant=user.hopital, patient=user.patient)
         else:
             serializer.save(tenant=user.hopital)
     
     def create(self, request, *args, **kwargs):
-        """Override create method to debug 400 errors"""
-        # Log des données reçues pour déboguer l'erreur 400
         print("=" * 50)
         print("📝 Données reçues pour création rendez-vous:")
         print(f"   User: {request.user} (role: {request.user.role if hasattr(request.user, 'role') else 'N/A'})")
         print(f"   Data: {request.data}")
-        print(f"   Headers: {dict(request.headers)}")
         print("=" * 50)
         
         try:
@@ -211,12 +197,10 @@ class RendezVousViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Filtrer par statut
         statut = request.query_params.get('statut', None)
         if statut:
             queryset = queryset.filter(statut__nom__iexact=statut)
         
-        # Filtrer par date
         date = request.query_params.get('date', None)
         if date:
             try:
@@ -230,16 +214,11 @@ class RendezVousViewSet(viewsets.ModelViewSet):
     
     @action(detail=False, methods=['get'], url_path='patient/(?P<patient_id>[^/.]+)')
     def rendez_vous_patient(self, request, patient_id=None):
-        """
-        Récupérer tous les rendez-vous d'un patient spécifique
-        URL: /api/rendez-vous/patient/{patient_id}/
-        """
+        """Récupérer tous les rendez-vous d'un patient spécifique"""
         print(f"📋 Récupération des rendez-vous pour le patient ID: {patient_id}")
         
-        # Vérifier que l'utilisateur a les droits
         user = request.user
         
-        # Si c'est un patient, il ne peut voir que ses propres rendez-vous
         if user.role == 'patient' and hasattr(user, 'patient'):
             if str(user.patient.id) != patient_id:
                 return Response(
@@ -247,15 +226,12 @@ class RendezVousViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_403_FORBIDDEN
                 )
         
-        # Récupérer les rendez-vous du patient
         queryset = self.get_queryset().filter(patient_id=patient_id)
         
-        # Filtrer par statut si spécifié
         statut = request.query_params.get('statut', None)
         if statut:
             queryset = queryset.filter(statut__nom__iexact=statut)
         
-        # Filtrer par date si spécifiée
         date = request.query_params.get('date', None)
         if date:
             try:
@@ -264,7 +240,6 @@ class RendezVousViewSet(viewsets.ModelViewSet):
             except ValueError:
                 pass
         
-        # Filtrer par plage de dates
         date_debut = request.query_params.get('date_debut', None)
         if date_debut:
             try:
@@ -308,31 +283,27 @@ class RendezVousViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Vérifier que la date n'est pas dans le passé
         if date_rdv < timezone.now().date():
             return Response(
                 {'error': 'La date ne peut pas être dans le passé'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Vérifier que ce n'est pas un dimanche
         if date_rdv.weekday() == 6:
             return Response(
                 {'error': 'Pas de rendez-vous le dimanche'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Récupérer les rendez-vous existants pour ce médecin ce jour-là
         rdv_existants = RendezVous.objects.filter(
             medecin_id=medecin_id,
             date_heure__date=date_rdv,
             statut__est_annule=False
         ).order_by('date_heure')
         
-        # Générer les créneaux disponibles
         creneaux = []
-        heure_debut = time(8, 0)  # 8h00
-        heure_fin = time(18, 0)   # 18h00
+        heure_debut = time(8, 0)
+        heure_fin = time(18, 0)
         
         current_time = datetime.combine(date_rdv, heure_debut)
         end_time = datetime.combine(date_rdv, heure_fin)
@@ -340,7 +311,6 @@ class RendezVousViewSet(viewsets.ModelViewSet):
         while current_time + timedelta(minutes=duree) <= end_time:
             creneau_fin = current_time + timedelta(minutes=duree)
             
-            # Vérifier si ce créneau est libre
             est_libre = True
             for rdv in rdv_existants:
                 rdv_fin = rdv.date_heure + timedelta(minutes=rdv.duree)
@@ -356,7 +326,7 @@ class RendezVousViewSet(viewsets.ModelViewSet):
                 'duree': duree
             })
             
-            current_time += timedelta(minutes=30)  # Créneaux de 30 minutes
+            current_time += timedelta(minutes=30)
         
         serializer = CreneauDisponibleSerializer(creneaux, many=True)
         return Response(serializer.data)
@@ -366,14 +336,12 @@ class RendezVousViewSet(viewsets.ModelViewSet):
         """Confirmer un rendez-vous"""
         rdv = self.get_object()
         
-        # Vérifier les permissions
         if request.user.role not in ['medecin', 'secretaire', 'infirmier', 'admin-systeme', 'proprietaire-hopital']:
             return Response(
                 {'error': 'Vous n\'avez pas la permission de confirmer ce rendez-vous'},
                 status=status.HTTP_403_FORBIDDEN
             )
         
-        # Trouver ou créer le statut "Confirmé"
         statut_confirme, created = RendezVousStatut.objects.get_or_create(
             tenant=rdv.tenant,
             nom='Confirmé',
@@ -395,7 +363,6 @@ class RendezVousViewSet(viewsets.ModelViewSet):
         """Annuler un rendez-vous"""
         rdv = self.get_object()
         
-        # ✅ CORRECTION: Les patients peuvent annuler leurs propres rendez-vous
         user = request.user
         is_patient_owner = user.role == 'patient' and hasattr(user, 'patient') and user.patient == rdv.patient
         
@@ -405,7 +372,6 @@ class RendezVousViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN
             )
         
-        # Trouver ou créer le statut "Annulé"
         statut_annule, created = RendezVousStatut.objects.get_or_create(
             tenant=rdv.tenant,
             nom='Annulé',
@@ -435,7 +401,6 @@ class RendezVousViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # ✅ CORRECTION: Les patients peuvent reporter leurs propres rendez-vous
         user = request.user
         is_patient_owner = user.role == 'patient' and hasattr(user, 'patient') and user.patient == rdv.patient
         
@@ -453,14 +418,12 @@ class RendezVousViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Vérifier la disponibilité
         if nouvelle_date < timezone.now():
             return Response(
                 {'error': 'La nouvelle date ne peut pas être dans le passé'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Vérifier les conflits
         conflits = RendezVous.objects.filter(
             medecin=rdv.medecin,
             date_heure__date=nouvelle_date.date(),
@@ -487,20 +450,17 @@ class RendezVousViewSet(viewsets.ModelViewSet):
         """Statistiques des rendez-vous"""
         queryset = self.get_queryset()
         
-        # Statistiques générales
         total = queryset.count()
         aujourd_hui = queryset.filter(date_heure__date=timezone.now().date()).count()
         cette_semaine = queryset.filter(
             date_heure__date__gte=timezone.now().date() - timedelta(days=7)
         ).count()
         
-        # Par statut
         par_statut = {}
         for statut in RendezVousStatut.objects.filter(tenant=request.user.hopital):
             count = queryset.filter(statut=statut).count()
             par_statut[statut.nom] = count
         
-        # Par médecin (si admin ou propriétaire)
         par_medecin = {}
         if request.user.role in ['admin-systeme', 'proprietaire-hopital']:
             from medical.models import Medecin
